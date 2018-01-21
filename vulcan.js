@@ -85,7 +85,7 @@ function pixelsToMeters(pixels) {
 
 /**
  * Provides a very acurrate, but arbitrary timestamp that is helpful for
- * calculating changes in between parts of script execution.
+ * calculating changes in time between parts of script execution.
  * @returns {number} An arbitrary timestamp in seconds.
  */
 function getArbitraryTime() {
@@ -112,7 +112,7 @@ function calculateDistance(initialSpeed, time, acceleration) {
 
 /**
  * Calculates the speed of a body given the distance it has traveled and the
- * total amount of travel time..
+ * total amount of travel time.
  * @param {number} distance - The distance traveled in meters.
  * @param {number} time - The period of time in seconds.
  * @returns {number} Speed in m/s.
@@ -247,7 +247,7 @@ Rocket.draw = function() {
  * @param {Array} initalPosition - The rocket's inital position.
  * @param {Array} target - The rocket's target position.
  * @param {number} totalAcceleration - The rocket's total acceleration.
- * @returns {Array} the rocket's inital acceleration.
+ * @returns {Array} the rocket's inital acceleration in m/s².
  */
 Rocket.calculateInitialAcceleration = function(/*initalPosition*//*, target*//*, totalAcceleration*/) {
 
