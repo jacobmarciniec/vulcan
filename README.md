@@ -1,8 +1,10 @@
 # Vulcan
-Vulcan gives you a fireworks show right in your browser! It is largely physically accurate.
+Vulcan gives you a fireworks show right in your browser!
 
-**This project is still in the phase of preliminary design. It is not functional.**
-<!-- ![maybe a project screenshot](https://images.pexels.com/photos/792381/pexels-photo-792381.jpeg "Project screenshot") -->
+Vulcan is largely physically accurate. It takes into account gravity, drag, and its calculations are made using SI units.
+
+**This project is in the phase of preliminary design. It is not functional.**
+<!-- ![TODO: add a project screenshot](https://images.pexels.com/photos/792381/pexels-photo-792381.jpeg "Project screenshot") -->
 
 ## Installation
 Simply include the `vulcan.js` script in your document using your preferred method.

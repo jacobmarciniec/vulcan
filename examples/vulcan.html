@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+
+<html lang="">
+    <head>
+        <meta charset="utf-8">
+
+        <title>Vulcan</title>
+        <meta name="description" content="">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <!-- Styles -->
+        <!-- <link href="style.css" rel="stylesheet"> -->
+        <style>
+            body {
+                position : relative;
+                width    : 100%;
+                height   : 100vh;
+                margin   : 0;
+                padding  : 0;
+            }
+
+            canvas {
+                position : absolute;
+                top      : 0;
+                left     : 0;
+            }
+        </style>
+    </head>
+
+    <body>
+
+        <canvas id="canvas"></canvas>
+
+        <!-- Scripts -->
+        <script src="vulcan.js"></script>
+        <script>
+            window.addEventListener("load", () => {
+                let canvas = document.querySelector("canvas");
+                canvas.style.width  = "100%";
+                canvas.style.height = "100vh";
+                canvas.setAttribute("width", canvas.offsetWidth);
+                canvas.setAttribute("height", canvas.offsetHeight);
+            });
+        </script>
+    </body>
+</html>
