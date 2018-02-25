@@ -1,22 +1,30 @@
 "use strict";
 
-/* Vulcan
- *
- * TODO: fix drag calculations
- * TODO: add tests
- * TODO: "prettify" drawings on canvas
- * TODO: account for distance along a parabolic path in calculations
- * TODO: account for update lag in calculations
- * TODO: account for computation time in calculations
- * TODO: account for special relativety in calculations
+/*
+ * Vulcan
+ * =======
+ * Copyright (c) 2018 Jacob Marciniec
+ * Github repository: https://github.com/foxyjacob/vulcan
+ * License:           MIT
+ * ========================================================================= */
 
+/*
+ * TODO: on click, calculate trajectory so that the shell actually detonates at
+ * the target
+ * TODO: calculate positions of bodies as a function of time, not their most
+ * recent parameters and the time since the last frame repaint
+ * TODO: add tests
+ * TODO: account for distance along a parabolic path in calculations
+ * TODO: account for special relativety in calculations
+ *
  * NOTE: The change in position of bodies is based on time, not frame repaints.
  * Therefore, if there is lag in repaints, bodies will appear to make drastic
- * changes in position. Furthermore, the change in position of bodies
+ * changes in position. However, the change in position of bodies
  * assumes a constant acceleration and velocity since the last repaint, and
  * this inaccurately positions bodies which travel on (for instance) parabolic
- * paths. This inaccuracy is directly proptional to the framerate, and should
- * be impercieveable for framerates greater than 30fps (this is a rough,
+ * paths as well as bodies with accelerations and velocities that change
+ * over time. This inaccuracy is directly proptional to the framerate, and
+ * should be impercieveable for framerates greater than 30fps (this is a rough,
  * uncalculated approximation).
  *
  * Unless specified otherwise, positions are expressed as arrays like so:
@@ -39,63 +47,164 @@
  *
  */
 
+/* Scaling
+ * ------------------------------------------------------------------------- */
 
-// the number of pixels that equal 1 meter
-const SCALE                       =  10;
-
-// at what framerate shells should be blocked from spawning
-const FRAMERATE_TOLERANCE         =  15 /* f/s */;
-
-const ACCELERATION_DUE_TO_GRAVITY =  -9.80665 /*  m/s² */;
-const AIR_DENSITY                 =   1.29 /* kg/m³ */;
-
-/* we assume that stars are spheres, and have an equal cross sectional area in
- * all directions */
-const STAR_CROSS_SECTIONAL_AREA  =   0.01 /* m² */;
-const STAR_MASS                  =   0.01 /* kg */;
-const STAR_DRAG_COEFFICIENT      =   0.47;
-const STAR_COUNT                 = 100;
-
-/* we assume that shells are spheres, and have an equal cross sectional area in
- * all directions */
-const SHELL_CROSS_SECTIONAL_AREA =   0.002 /* m² */;
-const SHELL_MASS                 =   0.6 + (STAR_MASS * STAR_COUNT) /* kg */;
-const SHELL_DRAG_COEFFICIENT     =   0.47;
-const TOTAL_SHELL_ACCELERATION   =  42;
+/**
+ * The number of pixels that equal 1 meter.
+ * @constant {number}
+ */
+const SCALE = 10;
 
 
-var canvas        = document.querySelector("canvas");
-var canvasContext = canvas.getContext("2d");
+/* Framerate monitoring
+ * ------------------------------------------------------------------------- */
 
+/**
+ * The framerate at which shells should be blocked from spawning.
+ * @constant {number}
+ */
+const FRAMERATE_TOLERANCE = 15 /* f/s */;
 
-// active and/or queued shells and stars
-var shells = [];
-var stars  = [];
-
-// for keeping track of the framerate
+/**
+ * Timestamp of the most recent screen repaint.
+ * @var {boolean}
+ */
 var mostRecentRepaint;
+
+/**
+ * The best approximation of the screen's current framerate.
+ * @var {boolean}
+ */
 var framerate;
 
-// for fanfare
-var fanfareInProgress;
 
-// for spawning a randomly-aimed firework
-/* NOTE: the spawn period is reset whenever a firework is launched (e.g.
- * manually via mouse click) and the maximum spawning period is a soft limit
- * i.e. it can be exceeded, for instance if the framerate is very low. */
-const MINIMUM_RANDOM_SPAWN_PERIOD = 2 /* seconds*/;
-const MAXIMUM_RANDOM_SPAWN_PERIOD = 5 /* seconds*/;
+/* Physical constants
+* ------------------------------------------------------------------------- */
+
+/**
+ * The acceleration due to gravity on the y axis.
+ * @constant {number}
+ */
+const ACCELERATION_DUE_TO_GRAVITY = -9.80665 /* m/s² */;
+
+/**
+ * The density of air.
+ * @constant {number}
+ */
+const AIR_DENSITY = 1.29 /* kg/m³ */;
+
+
+/** Stars
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The cross-sectional area of a star. NOTE: Stars are assumed to be spheres,
+ * and therefore have an equal cross-sectional area in all directions of motion.
+ * @constant {number}
+ */
+const STAR_CROSS_SECTIONAL_AREA = 0.01 /* m² */;
+
+/**
+ * The mass of a star.
+ * @constant {number}
+ */
+const STAR_MASS = 0.01 /* kg */;
+
+/**
+ * The drag coefficient of a star.
+ * @constant {number}
+ */
+const STAR_DRAG_COEFFICIENT = 0.4;
+
+/**
+ * The number of stars in a shell.
+ * @constant {number}
+ */
+const STAR_COUNT = 100;
+
+
+/* Shells
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The mass of a shell.
+ * @constant {number}
+ */
+const SHELL_MASS = 0.6 + (STAR_MASS * STAR_COUNT); /* kg */
+
+/**
+ * The thrust a shell generates.
+ * @constant {number}
+ */
+const SHELL_THRUST = 100 /* newtons */;
+
+/**
+ * The drag coefficient of a shell.
+ * @constant {number}
+ */
+const SHELL_DRAG_COEFFICIENT = 0.47;
+
+/**
+ * The cross-sectional area of a shell. NOTE: Shells are assumed to be spheres,
+ * and therefore have an equal cross-sectional area in all directions of motion.
+ * @constant {number}
+ */
+const SHELL_CROSS_SECTIONAL_AREA = 0.002 /* m² */;
+
+
+/* Spawning a randomly-aimed firework
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The minimum amount of time (in seconds) that should pass before a random
+ * firework is spawned.
+ * @constant {number}
+ */
+const MINIMUM_RANDOM_SPAWN_PERIOD = 2 /* seconds */;
+
+/**
+ * The maximum amount of time (in seconds) that should pass before a random
+ * firework is spawned. NOTE: The maximum spawning period is a soft limit i.e.
+ * it can be exceeded, for instance if the framerate is very low.
+ * @constant {number}
+ */
+const MAXIMUM_RANDOM_SPAWN_PERIOD = 5 /* seconds */;
+
+/**
+ * Timestamp of the most recent time a random firework was spawned.
+ * @var {number}
+ */
 var mostRecentRandomSpawn;
+
+/**
+ * The amount of time that should pass until the next random fireork is spawned
+ * (in seconds from the most recent spawn). NOTE: The spawn period is reset
+ * whenever a firework is launched (e.g. manually via mouse click).
+ * @var {number}
+ */
 var currentRandomSpawnPeriod;
 
+/**
+ * Resets the most recent random firework spawn time and the period until the
+ * next random spawn.
+ * @returns {undefined}
+ */
 function resetRandomSpawn() {
+
     mostRecentRandomSpawn = getArbitraryTime();
     currentRandomSpawnPeriod = getRandomArbitrary(
         MINIMUM_RANDOM_SPAWN_PERIOD,
         MAXIMUM_RANDOM_SPAWN_PERIOD
     );
+
+    return;
+
 }
 
+
+/* Helper functions
+ * ------------------------------------------------------------------------- */
 
 /**
  * Generates a random integer within a given range.
@@ -150,6 +259,7 @@ function mapToCanvas(position) {
         scale(position[0]),
         invert(scale(position[1]), verticalCenter)
     ];
+
 }
 
 
@@ -164,11 +274,15 @@ function mapToCanvas(position) {
 function mapFromCanvas(position) {
 
     let scale = (component) => {
+
         return component / SCALE;
+
     };
 
     let invert = (component, center) => {
+
         return center + (center - component);
+
     };
 
     let verticalCenter = canvas.offsetHeight / 2;
@@ -177,6 +291,7 @@ function mapFromCanvas(position) {
         scale(position[0]),
         scale(invert(position[1], verticalCenter))
     ];
+
 }
 
 
@@ -251,13 +366,16 @@ function calculateSpeed(distance, time) {
  * @param {number} speed - The body's speed in m/s.
  * @returns {number} Acceleration due to drag in m/s².
  */
-function calculateAccelerationDueToDrag(fluidDensity, dragCoefficient, crossSectionalArea, speed, mass) {
+function calculateAccelerationDueToDrag(fluidDensity, dragCoefficient, crossSectionalArea, velocity, mass) {
 
-    let acceleration = -(0.5 * fluidDensity * dragCoefficient * crossSectionalArea * (speed * speed)) / mass;
+    let speed = Math.sqrt(Math.pow(velocity[0], 2) + Math.pow(velocity[1], 2));
 
-    if (speed < 0) {
-        acceleration = -acceleration;
-    }
+    let drag = -(0.5 * fluidDensity * dragCoefficient * crossSectionalArea * (speed * speed));
+
+    let acceleration = [
+        (drag / mass) * (velocity[0] / speed),
+        (drag / mass) * (velocity[1] / speed)
+    ];
 
     return acceleration;
 
@@ -288,6 +406,9 @@ function Body(initialPosition, initalVelocity, initalAcceleration, mass, dragCoe
 }
 
 
+/* Body class
+ * ------------------------------------------------------------------------- */
+
 /**
 * Updates a body's current position, velocity, and acceleration.
 * @returns {Array} The body's new position.
@@ -315,28 +436,21 @@ Body.prototype.update = function() {
     ];
 
 
-    let accelerationDueToDrag = [
+    let accelerationDueToDrag =
         calculateAccelerationDueToDrag(
             AIR_DENSITY,
             this.dragCoefficient,
             this.crossSectionalArea,
-            lastVelocity[0],
+            lastVelocity,
             this.mass
-        ),
-
-        calculateAccelerationDueToDrag(
-            AIR_DENSITY,
-            this.dragCoefficient,
-            this.crossSectionalArea,
-            lastVelocity[1],
-            this.mass
-        )
-    ];
+        );
 
     let accelerationDueToThrust = [0, 0];
 
     if (this.getAccelerationDueToThrust) {
+
         accelerationDueToThrust = this.getAccelerationDueToThrust();
+
     }
 
     this.currentPosition = [
@@ -344,15 +458,15 @@ Body.prototype.update = function() {
         (lastPosition[1] + displacement[1])
     ];
 
-    // XXX this does not account for any paths other than lines
+    // XXX: this does not account for any paths other than lines
     this.currentVelocity = [
         calculateSpeed(displacement[0], timeDelta),
         calculateSpeed(displacement[1], timeDelta)
     ];
 
     this.currentAcceleration = [
-        (accelerationDueToThrust[0] || 0) + accelerationDueToDrag[0],
-        (accelerationDueToThrust[1] || 0) + accelerationDueToDrag[1] + ACCELERATION_DUE_TO_GRAVITY
+        (accelerationDueToThrust[0] || 0) + (accelerationDueToDrag[0] || 0),
+        (accelerationDueToThrust[1] || 0) + (accelerationDueToDrag[1] || 0) + ACCELERATION_DUE_TO_GRAVITY
     ];
 
     this.lastUpdate = timeNow;
@@ -371,16 +485,20 @@ Body.prototype.draw = function() {
     let mappedPosition = mapToCanvas(this.currentPosition);
 
     canvasContext.beginPath();
-    canvasContext.arc(mappedPosition[0], mappedPosition[1], 2, 0, 2 * Math.PI);
+    canvasContext.arc(mappedPosition[0], mappedPosition[1], 1, 0, 2 * Math.PI);
     canvasContext.closePath();
-    canvasContext.fillStyle = "rgb(200,0,0)";
+    canvasContext.fillStyle = this.color || "rgb(200,0,0)";
     canvasContext.fill();
     return;
 
 };
 
 
+/* Shell class
+ * ------------------------------------------------------------------------- */
+
 /**
+ * @param {Array} target
  */
 function Shell(target) {
 
@@ -396,7 +514,8 @@ function Shell(target) {
         Shell.calculateInitialAcceleration( // initalAcceleration
             laucherPosition,
             target,
-            TOTAL_SHELL_ACCELERATION
+            SHELL_MASS,
+            SHELL_THRUST
         ),
         SHELL_MASS,                         // mass
         SHELL_DRAG_COEFFICIENT,             // dragCoefficient
@@ -417,7 +536,7 @@ Shell.prototype.spawn = function() {
 
     this.spawned = true;
 
-    // XXX this has nothing to do with a shell
+    // XXX: this has nothing to do with a shell
     resetRandomSpawn();
 
     shells.push(this);
@@ -438,7 +557,7 @@ Shell.prototype.detonate = function() {
 
     while (starCount < STAR_COUNT) {
 
-        new Star(this.currentPosition).spawn();
+        new Star(this).spawn();
         starCount += 1;
 
     }
@@ -464,8 +583,8 @@ Shell.prototype.getAccelerationDueToThrust = function() {
     ];
 
     return [
-        proportions[0] * TOTAL_SHELL_ACCELERATION,
-        proportions[1] * TOTAL_SHELL_ACCELERATION
+        proportions[0] * SHELL_THRUST / SHELL_MASS,
+        proportions[1] * SHELL_THRUST / SHELL_MASS
     ];
 
 };
@@ -491,13 +610,14 @@ Shell.getLauncherPosition = function() {
  * @param {number} totalAcceleration - The shell's total acceleration.
  * @returns {Array} the shell's inital acceleration in m/s².
  */
-Shell.calculateInitialAcceleration = function(initalPosition, target, totalAcceleration) {
+Shell.calculateInitialAcceleration = function(initalPosition, target, mass, thrust) {
 
     let deltaX = target[0] - initalPosition[0];
     let deltaY = target[1] - initalPosition[1];
     let displacment = Math.sqrt(Math.pow(deltaX, 2) + Math.pow(deltaY, 2));
     let xProportion = deltaX / displacment;
     let yProportion = deltaY / displacment;
+    let totalAcceleration = thrust / mass;
 
     return [
         totalAcceleration * xProportion,
@@ -509,12 +629,14 @@ Shell.calculateInitialAcceleration = function(initalPosition, target, totalAccel
 
 /**
  * Generates a random color that a firework can be.
- * @returns {String} A color in rgb(rrr, ggg, bbb) format.
+ * @returns {String} A color in hsl(hhh, sss, lll) format.
  */
 Shell.getRandomColor = function() {
 
-    // FIXME NOT random.
-    return "rgb(222, 22, 22)";
+    let randomHue        = getRandomInteger(  0, 360);
+    let randomSaturation = getRandomInteger( 70, 100).toString() + "%";
+    let randomLightness  = getRandomInteger( 50,  70).toString() + "%";
+    return "hsl(" + randomHue + "," + randomSaturation + "," + randomLightness + ")";
 
 };
 
@@ -532,19 +654,28 @@ Shell.getRandomTarget = function() {
 };
 
 
+/* Star class
+ * ------------------------------------------------------------------------- */
+
 /**
  * > [S]tars are pellets or simply pieces of pyrotechnic composition which
  * > . . . when ignited, burn a certain color or make a certain spark effect.
  * > (https://en.wikipedia.org/wiki/Pyrotechnic_star, 24 January 2018)
  */
-function Star(initialPosition) {
+function Star(shell) {
 
-    /* Although it is not physically accurate to give a star an inital
+    /* XXX: Although it is not physically accurate to give a star an inital
      * velocity (as though it spontaneously recieved it) it will be given one,
      * since its acceleration due to the detonation of its shell would be so
      * large, and only exist for such a short period of time that it is
      * accurate to assume so for the purposes of this project. */
-    let randomMagnitude = getRandomInteger(30, 100);
+
+    /* XXX: It is also inaccurate to give stars such a large range of inital
+     * velocities. In reality, they would all have very similar post-detination
+     * velocities. In this project however, the wide range of velocities
+     * creates a 3D effect (stars with low velocities are percieved as "coming
+     * at" or "flying away from" you). */
+    let randomMagnitude = getRandomInteger(3, 100);
     let randomDirection = getRandomArbitrary(0, 2 * Math.PI);
     let randomVelocity = [
         Math.cos(randomDirection) * randomMagnitude,
@@ -553,7 +684,7 @@ function Star(initialPosition) {
 
     Body.call(
         this,
-        initialPosition,          // initialPosition
+        shell.currentPosition,    // initialPosition
         randomVelocity,           // initalVelocity
         [0, 0],                   // initalAcceleration
         STAR_MASS,                // mass
@@ -562,9 +693,10 @@ function Star(initialPosition) {
     );
 
     // How long until the star burns out
-    this.duration         = getRandomArbitrary(0.3, 3);
-    this.decayed          = false;
- // this.color inherited from parent (Shell)
+    this.shell     = shell;
+    this.duration  = getRandomArbitrary(2.5, 3);
+    this.decayed   = false;
+    this.color     = shell.color;
 
 }
 
@@ -586,6 +718,15 @@ Star.prototype.spawn = function() {
 
 };
 
+
+/* Fanfare
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Whether a fanfare is in progress.
+ * @var {boolean}
+ */
+var fanfareInProgress = false;
 
 /**
  * Spawns 16 random shells a second for approximately 4 seconds, simulating a
@@ -622,6 +763,33 @@ function fanfare() {
 
 }
 
+
+/* Animation loop
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The canvas element.
+ * @var {HTMLCanvasElement}
+ */
+var canvas = document.querySelector("canvas");
+
+/**
+ * The canvas element's 2D rendering context.
+ * @var {RenderingContext}
+ */
+var canvasContext = canvas.getContext("2d");
+
+/**
+ * Active and/or queued shells.
+ * @var {boolean}
+ */
+var shells = [];
+
+/**
+ * Active and/or queued stars.
+ * @var {boolean}
+ */
+var stars  = [];
 
 /**
  * Updates animatable objects, etc.
@@ -729,7 +897,7 @@ window.addEventListener("load", animationLoop);
 
 canvas.addEventListener("click", (event) => {
 
-    // XXX clicks are redundantly mapped from, and then back to the canvas
+    // XXX: clicks are redundantly mapped from, and then back to the canvas
     new Shell(mapFromCanvas([event.clientX, event.clientY])).spawn();
 
 });
